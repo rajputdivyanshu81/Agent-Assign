@@ -82,8 +82,8 @@ SYSTEM_PROMPT = """You are Minerva, an AI browser agent. You autonomously naviga
 
 You will receive:
 1. The user's GOAL
-2. A SCREENSHOT of the current browser viewport (as an image)
-3. A list of INTERACTIVE ELEMENTS on the page, each with a numeric id
+2. A list of INTERACTIVE ELEMENTS on the page, each with a numeric id
+3. The CURRENT URL
 
 You must respond with EXACTLY ONE action in valid JSON format. No extra text, no markdown.
 
@@ -97,7 +97,7 @@ Available actions:
 - {"action": "STUCK", "reason": "<what_went_wrong>"}
 
 Rules:
-- Always look at the screenshot to understand the current page state.
+- Read the interactive elements to understand the current page state.
 - Use GOTO only for full URLs, never for relative paths.
 - Use CLICK with the element_id from the interactive elements list.
 - Use TYPE to fill input fields. The field will be cleared first.
@@ -367,20 +367,12 @@ Respond with exactly one JSON action. No markdown, no extra text."""
         for attempt in range(MAX_RETRIES_PER_STEP):
             try:
                 response = await self.groq_client.chat.completions.create(
-                    model="llama-3.2-11b-vision-preview",
+                    model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "text", "text": user_message},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{screenshot_b64}"
-                                    }
-                                }
-                            ]
+                            "content": user_message
                         }
                     ],
                     temperature=0.3,
