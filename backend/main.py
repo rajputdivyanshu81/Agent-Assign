@@ -1,6 +1,11 @@
+from dotenv import load_dotenv
+import os
+
+# Load .env from project root (one level up from /backend)
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import asyncio
 import json
 import logging
@@ -9,8 +14,6 @@ import uuid
 from db import engine, Base, async_session
 from models import AgentRun, AgentStep, ExtractedResult
 from agent_core import MinervaAgent
-
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("minerva_backend")
