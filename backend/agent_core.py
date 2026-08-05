@@ -467,39 +467,27 @@ Respond with exactly one JSON action. No markdown, no extra text."""
                 await self.browser.safe_goto(action.target)
 
             elif action.action_type == "CLICK":
-                element = await self.browser.page.query_selector(
-                    f"[data-minerva-id='{action.target}']"
-                )
-                if not element:
+                success = await self.browser.click_element(action.target)
+                if not success:
                     await self._emit("log", {
                         "step": self.state.step_count,
                         "step_type": "error",
                         "message": f"Element {action.target} not found. Will re-observe."
                     })
                     return False
-                await element.click()
-                await self.browser.page.wait_for_timeout(1500)
 
             elif action.action_type == "TYPE":
-                element = await self.browser.page.query_selector(
-                    f"[data-minerva-id='{action.target}']"
-                )
-                if not element:
+                success = await self.browser.type_element(action.target, action.value)
+                if not success:
                     await self._emit("log", {
                         "step": self.state.step_count,
                         "step_type": "error",
                         "message": f"Input element {action.target} not found. Will re-observe."
                     })
                     return False
-                await element.click()
-                await element.fill("")  # Clear first
-                await element.type(action.value, delay=50)
-                await self.browser.page.wait_for_timeout(500)
 
             elif action.action_type == "SCROLL":
-                delta = 400 if action.target == "down" else -400
-                await self.browser.page.mouse.wheel(0, delta)
-                await self.browser.page.wait_for_timeout(1000)
+                await self.browser.scroll(action.target)
 
             elif action.action_type in ("EXTRACT", "DONE", "STUCK"):
                 pass  # Terminal actions — no browser interaction needed
@@ -507,6 +495,7 @@ Respond with exactly one JSON action. No markdown, no extra text."""
             else:
                 logger.warning(f"Unhandled action type: {action.action_type}")
                 return False
+
 
             # Record in history
             self.state.action_history.append(
@@ -529,7 +518,7 @@ Respond with exactly one JSON action. No markdown, no extra text."""
     async def _check_captcha(self, dom_snapshot: str, screenshot_b64: str) -> bool:
         """Check DOM for known CAPTCHA and anti-bot indicators."""
         combined_text = dom_snapshot.lower()
-        page_title = await self.browser.page.title()
+        page_title = await self.browser.get_title()
         combined_text += " " + page_title.lower()
 
         for indicator in CAPTCHA_INDICATORS:
