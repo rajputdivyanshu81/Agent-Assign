@@ -51,16 +51,35 @@ class SafeBrowserManager:
     def _start_sync(self):
         if not self._pw:
             self._pw = sync_playwright().start()
-            self.browser = self._pw.chromium.launch(
-                headless=True,
-                args=["--disable-web-security", "--no-sandbox"]
+            
+            # Stealth arguments to bypass automation flags
+            browser_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--no-sandbox",
+                "--disable-web-security"
+            ]
+            
+            # Use a persistent context to save cookies/sessions
+            user_data_dir = "./browser_user_data"
+            
+            self.context = self._pw.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
+                headless=False, # Essential for bypassing Cloudflare
+                args=browser_args,
+                ignore_default_args=["--enable-automation"],
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720}
             )
-            self.context = self.browser.new_context(
-                viewport={"width": 1280, "height": 720},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            self.page = self.context.new_page()
-            logger.info("Playwright Browser launched successfully (sync thread).")
+            
+            # In persistent context, there might be pages already open. We grab the first or create one.
+            pages = self.context.pages
+            self.page = pages[0] if pages else self.context.new_page()
+            
+            # Modify navigator.webdriver via init script
+            self.page.add_init_script("delete navigator.__proto__.webdriver;")
+            
+            logger.info("Playwright Browser launched successfully (stealth mode sync thread).")
 
     def _cleanup_sync(self):
         try:
@@ -162,7 +181,8 @@ class SafeBrowserManager:
         element = self.page.query_selector(f"[data-minerva-id='{minerva_id}']")
         if not element:
             return False
-        element.click()
+        # Use force=True to bypass overlays/modals that intercept clicks
+        element.click(force=True, timeout=5000)
         self.page.wait_for_timeout(1500)
         return True
 
@@ -170,10 +190,16 @@ class SafeBrowserManager:
         element = self.page.query_selector(f"[data-minerva-id='{minerva_id}']")
         if not element:
             return False
-        element.click()
+        # Use force=True to bypass overlays intercepting pointer events
+        element.click(force=True, timeout=5000)
         element.fill("")
         element.type(text, delay=50)
         self.page.wait_for_timeout(500)
+        return True
+
+    def _press_enter_sync(self):
+        self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(1500)
         return True
 
     def _scroll_sync(self, direction: str):
@@ -228,6 +254,9 @@ class SafeBrowserManager:
 
     async def type_element(self, minerva_id: str, text: str) -> bool:
         return await self._run_in_thread(self._type_element_sync, minerva_id, text)
+
+    async def press_enter(self) -> bool:
+        return await self._run_in_thread(self._press_enter_sync)
 
     async def scroll(self, direction: str):
         await self._run_in_thread(self._scroll_sync, direction)

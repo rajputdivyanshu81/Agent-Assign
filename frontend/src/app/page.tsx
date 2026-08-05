@@ -31,6 +31,7 @@ export default function Home() {
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [browserUrl, setBrowserUrl] = useState<string>("");
   const [wsConnected, setWsConnected] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [approvalMode, setApprovalMode] = useState(false);
@@ -79,6 +80,7 @@ export default function Home() {
 
         case "screenshot":
           setScreenshot(data.image);
+          if (data.url) setBrowserUrl(data.url);
           break;
 
         case "result":
@@ -139,6 +141,7 @@ export default function Home() {
     }
     setLogs([]);
     setScreenshot(null);
+    setBrowserUrl("");
     setResultData(null);
     setRunId(null);
     setStatus("idle");
@@ -315,7 +318,7 @@ export default function Home() {
                 <span className={`${styles.browserDot} ${styles.browserDotGreen}`} />
               </div>
               <span className={styles.browserUrlText}>
-                {screenshot ? "Agent is browsing..." : "Waiting for agent..."}
+                {browserUrl || (screenshot ? "Agent is browsing..." : "Waiting for agent...")}
               </span>
             </div>
 

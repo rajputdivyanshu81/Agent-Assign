@@ -43,8 +43,7 @@ RATE_LIMIT_BACKOFF = [2, 4, 8]  # seconds
 CAPTCHA_INDICATORS = [
     "captcha", "recaptcha", "hcaptcha", "cf-turnstile",
     "challenge-running", "challenge-form", "cf-challenge",
-    "please verify you are a human", "are you a robot",
-    "cloudflare", "just a moment"
+    "please verify you are a human", "are you a robot"
 ]
 
 LOGIN_INDICATORS = [
@@ -91,6 +90,7 @@ Available actions:
 - {"action": "GOTO", "url": "<full_url>", "reasoning": "<why>"}
 - {"action": "CLICK", "element_id": <number>, "reasoning": "<why>"}
 - {"action": "TYPE", "element_id": <number>, "text": "<text_to_type>", "reasoning": "<why>"}
+- {"action": "PRESS_ENTER", "reasoning": "<why>"}
 - {"action": "SCROLL", "direction": "down" | "up", "reasoning": "<why>"}
 - {"action": "EXTRACT", "data": {<structured_extracted_data>}, "reasoning": "<why>"}
 - {"action": "DONE", "summary": "<final_summary>", "reasoning": "<why>"}
@@ -99,13 +99,17 @@ Available actions:
 Rules:
 - Read the interactive elements to understand the current page state.
 - Use GOTO only for full URLs, never for relative paths.
-- Use CLICK with the element_id from the interactive elements list.
-- Use TYPE to fill input fields. The field will be cleared first.
+- Use CLICK with the element_id from the interactive elements list. If a popup or overlay blocks the page, look for and CLICK the 'Close', 'X', or 'Decline' element.
+- Use TYPE to fill input fields. The field is automatically cleared before typing, so you don't need to manually clear pre-filled text.
+- IMPORTANT TIP: When typing cities into flight/travel search boxes, always use PRESS_ENTER immediately after typing to lock in the autocomplete selection.
+- Use PRESS_ENTER to submit a form if there is no obvious submit button.
 - Use EXTRACT when you have gathered useful data from the page. Include ALL relevant data.
 - Use DONE when the goal is fully accomplished. Include a summary.
 - Use STUCK if you cannot make progress after trying alternatives.
 - NEVER attempt to bypass CAPTCHAs, login walls, or anti-bot protections.
 - If you detect a CAPTCHA or login requirement, respond with STUCK and explain.
+- MULTI-SOURCE RULE: If the user asks for the "cheapest", "best", or "top" option, you MUST search at least two different sources (e.g., kayak.com and flights.google.com). Do NOT call DONE until you have successfully extracted data from at least two different websites. If you fail to find information on one site, use GOTO to try another site immediately.
+- EXTRACTION RULE: If your goal is to extract information and you can already see the relevant text on the screen, immediately use the EXTRACT action. Do not scroll or click unnecessarily.
 - Be methodical: plan your approach, then execute step by step.
 """
 
@@ -151,10 +155,10 @@ class MinervaAgent:
                 "message": f"Goal received: {goal}. Starting browser session..."
             })
 
-            # Navigate to Google as default starting point
-            await self.browser.safe_goto("https://www.google.com")
+            # Navigate to DuckDuckGo as default starting point to avoid Google bot detection
+            await self.browser.safe_goto("https://html.duckduckgo.com/html/")
             screenshot = await self.browser.capture_screenshot()
-            await self._emit("screenshot", {"image": screenshot})
+            await self._emit("screenshot", {"image": screenshot, "url": self.browser.page.url})
 
             while self.state.step_count < MAX_STEPS:
                 # --- Check stop signal ---
@@ -180,7 +184,7 @@ class MinervaAgent:
                 dom_snapshot = await self.browser.get_interactive_dom()
                 self.state.current_url = self.browser.page.url
 
-                await self._emit("screenshot", {"image": screenshot})
+                await self._emit("screenshot", {"image": screenshot, "url": self.state.current_url})
 
                 # 2. Check for CAPTCHA / anti-bot
                 captcha_detected = await self._check_captcha(dom_snapshot, screenshot)
@@ -367,7 +371,7 @@ Respond with exactly one JSON action. No markdown, no extra text."""
         for attempt in range(MAX_RETRIES_PER_STEP):
             try:
                 response = await self.groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama-3.1-8b-instant",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {
@@ -437,6 +441,8 @@ Respond with exactly one JSON action. No markdown, no extra text."""
                 value=data.get("text", ""),
                 reasoning=reasoning
             )
+        elif action_type == "PRESS_ENTER":
+            return AgentAction(action_type="PRESS_ENTER", reasoning=reasoning)
         elif action_type == "SCROLL":
             return AgentAction(action_type="SCROLL", target=data.get("direction", "down"), reasoning=reasoning)
         elif action_type == "EXTRACT":
@@ -477,6 +483,9 @@ Respond with exactly one JSON action. No markdown, no extra text."""
                         "message": f"Input element {action.target} not found. Will re-observe."
                     })
                     return False
+
+            elif action.action_type == "PRESS_ENTER":
+                await self.browser.press_enter()
 
             elif action.action_type == "SCROLL":
                 await self.browser.scroll(action.target)
