@@ -91,7 +91,7 @@ manager = ConnectionManager()
 # ---------------------------------------------------------------------------
 # Agent run orchestrator
 # ---------------------------------------------------------------------------
-async def run_agent(ws_id: str, goal: str, run_id: uuid.UUID):
+async def run_agent(ws_id: str, goal: str, run_id: uuid.UUID, approval_mode: bool = False):
     """Launch the real MinervaAgent and persist steps/results to DB."""
 
     async def ws_send_callback(data: dict):
@@ -115,6 +115,7 @@ async def run_agent(ws_id: str, goal: str, run_id: uuid.UUID):
 
     # Create the agent
     agent = MinervaAgent(ws_send_callback=ws_send_callback, run_id=str(run_id))
+    agent.set_approval_mode(approval_mode)
     manager.active_agents[ws_id] = agent
 
     # Save the run to DB
@@ -194,7 +195,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 run_id = uuid.uuid4()
-                current_task = asyncio.create_task(run_agent(ws_id, goal, run_id))
+                current_task = asyncio.create_task(
+                    run_agent(
+                        ws_id,
+                        goal,
+                        run_id,
+                        approval_mode=bool(msg.get("approval_mode", False)),
+                    )
+                )
                 await manager.send_json(ws_id, {
                     "type": "status",
                     "status": "running",

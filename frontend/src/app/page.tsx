@@ -145,7 +145,7 @@ export default function Home() {
     setResultData(null);
     setRunId(null);
     setStatus("idle");
-    send({ type: "start", goal });
+    send({ type: "start", goal, approval_mode: approvalMode });
   };
 
   const handleStop = () => send({ type: "stop" });
@@ -195,6 +195,7 @@ export default function Home() {
           <h1 className={styles.headerTitle}>Minerva</h1>
         </div>
         <div className={styles.headerRight}>
+          {runId && <div className={styles.runBadge}>Run {runId.slice(0, 8)}</div>}
           <div className={`${styles.agentStatus} ${getStatusStyle()}`}>
             {getStatusLabel()}
           </div>

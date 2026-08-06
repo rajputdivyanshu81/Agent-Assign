@@ -71,6 +71,17 @@
   border: 1px solid var(--border-subtle);
 }
 
+.runBadge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  font-family: 'GeistMono', monospace;
+}
+
 .statusDot {
   width: 8px;
   height: 8px;
