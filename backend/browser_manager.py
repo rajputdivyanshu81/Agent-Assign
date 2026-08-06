@@ -19,9 +19,6 @@ import socket
 
 logger = logging.getLogger("minerva_backend.browser")
 
-# Dedicated thread pool for Playwright sync operations
-_playwright_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
-
 # List of common selectors for cookie banners to dismiss
 COOKIE_SELECTORS = [
     "button[id*=cookie]", "button[class*=cookie]", "a[class*=cookie]",
@@ -37,12 +34,13 @@ class SafeBrowserManager:
         self.browser: Browser = None
         self.context: BrowserContext = None
         self.page: Page = None
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
 
     async def _run_in_thread(self, func, *args, **kwargs):
         """Run a sync function in the dedicated Playwright thread."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            _playwright_executor,
+            self._executor,
             functools.partial(func, *args, **kwargs)
         )
 
@@ -239,6 +237,7 @@ class SafeBrowserManager:
 
     async def cleanup(self):
         await self._run_in_thread(self._cleanup_sync)
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
     def is_url_safe(self, url: str) -> bool:
         try:
