@@ -1,16 +1,16 @@
-# Minerva
+# Minerva - Autonomous E-Commerce Comparison Agent
 
-Minerva is a transparent browser agent for research workflows. A user enters a plain-English goal, the backend runs an LLM-driven observe-think-act loop in Playwright, and the frontend streams the agent's reasoning, actions, page screenshots, controls, and final structured result.
+Minerva is a transparent browser agent specifically tuned for e-commerce workflows. A user enters a plain-English product search goal, the backend runs an LLM-driven observe-think-act loop in Playwright to scrape and compare products across various online stores, and the frontend streams the agent's reasoning, actions, page screenshots, and final structured result.
 
 ## What To Try
 
 Good demo goals:
 
-- `Research Slack, Notion, and Asana pricing across their official websites and produce a structured comparison.`
-- `Compare Linear and Jira for issue tracking using at least two sources and summarize tradeoffs for a small product team.`
-- `Find current public pricing details for GitHub Copilot and Cursor, then compare plans and limitations.`
+- `Search the web to find and compare the price of 'Sony WH-1000XM5' headphones across different online stores.`
+- `Find the cheapest price for an 'iPhone 15 Pro 256GB' from at least three different e-commerce retailers and summarize.`
+- `Look up the best deals for a 'Dyson V15 Detect' vacuum on BestBuy and Amazon, comparing prices and shipping notes.`
 
-The agent is not a hardcoded script. Each step is selected by the LLM from the current URL, visible interactive elements, readable page text, action history, and the user's goal.
+The agent is not a hardcoded script. Each step is selected by the LLM from the current URL, visible interactive elements, readable page text, action history, and the user's goal, with specialized rules for navigating e-commerce sites.
 
 ## Local Run
 
