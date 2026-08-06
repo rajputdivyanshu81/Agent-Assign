@@ -3,11 +3,10 @@ services:
     name: minerva-backend
     env: docker
     rootDir: backend
+    dockerfilePath: ./Dockerfile
     plan: starter
     healthCheckPath: /
     envVars:
-      - key: GROQ_API_KEY
-        sync: false
       - key: DATABASE_URL
         sync: false
       - key: MINERVA_HEADLESS
