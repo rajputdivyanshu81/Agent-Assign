@@ -111,6 +111,9 @@ Rules:
 - Use STUCK if you cannot make progress after trying alternatives.
 - NEVER attempt to bypass CAPTCHAs, login walls, or anti-bot protections.
 - If you detect a CAPTCHA or login requirement, respond with STUCK and explain.
+- If a CLICK does not visibly change the page or URL, do not repeat that same CLICK. Try a search, a direct URL, scrolling, or a different element.
+- For pricing research, prefer official pricing pages such as the product's /pricing page over marketing "learn more" buttons.
+- If the user's goal is about flights, stay on flight-search surfaces and avoid hotel, rental, and vacation-rental tabs unless the goal explicitly asks for them.
 - MULTI-SOURCE RULE: If the user asks for the "cheapest", "best", or "top" option, you MUST search at least two different sources (e.g., kayak.com and flights.google.com). Do NOT call DONE until you have successfully extracted data from at least two different websites. If you fail to find information on one site, use GOTO to try another site immediately.
 - EXTRACTION RULE: If your goal is to extract information and you can already see the relevant text on the screen, immediately use the EXTRACT action. Do not scroll or click unnecessarily.
 - Be methodical: plan your approach, then execute step by step.
@@ -162,7 +165,7 @@ class MinervaAgent:
                 "message": f"Goal received: {goal}. Starting browser session..."
             })
 
-            # Navigate to DuckDuckGo as default starting point to avoid Google bot detection
+            # Start from a neutral search page and let the LLM choose the route.
             await self.browser.safe_goto("https://html.duckduckgo.com/html/")
             screenshot = await self.browser.capture_screenshot()
             await self._emit("screenshot", {"image": screenshot, "url": self.browser.page.url})
