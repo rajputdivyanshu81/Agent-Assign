@@ -11,6 +11,7 @@ import asyncio
 import logging
 import base64
 import functools
+import os
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 import ipaddress
@@ -57,15 +58,17 @@ class SafeBrowserManager:
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-sandbox",
+                "--disable-dev-shm-usage",
                 "--disable-web-security"
             ]
             
             # Use a persistent context to save cookies/sessions
-            user_data_dir = "./browser_user_data"
+            user_data_dir = os.getenv("MINERVA_BROWSER_USER_DATA_DIR", "./browser_user_data")
+            headless = os.getenv("MINERVA_HEADLESS", "true").lower() not in ("0", "false", "no")
             
             self.context = self._pw.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                headless=False, # Essential for bypassing Cloudflare
+                headless=headless,
                 args=browser_args,
                 ignore_default_args=["--enable-automation"],
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -177,6 +180,21 @@ class SafeBrowserManager:
             )
         return "\n".join(simplified_dom)
 
+    def _get_readable_text_sync(self) -> str:
+        js_script = """
+        () => {
+            const clone = document.body.cloneNode(true);
+            clone.querySelectorAll('script, style, noscript, svg, canvas').forEach(el => el.remove());
+            return clone.innerText
+                .split('\\n')
+                .map(line => line.trim())
+                .filter(Boolean)
+                .join('\\n')
+                .slice(0, 12000);
+        }
+        """
+        return self.page.evaluate(js_script) or ""
+
     def _click_element_sync(self, minerva_id: str) -> bool:
         element = self.page.query_selector(f"[data-minerva-id='{minerva_id}']")
         if not element:
@@ -248,6 +266,9 @@ class SafeBrowserManager:
 
     async def get_interactive_dom(self) -> str:
         return await self._run_in_thread(self._get_interactive_dom_sync)
+
+    async def get_readable_text(self) -> str:
+        return await self._run_in_thread(self._get_readable_text_sync)
 
     async def click_element(self, minerva_id: str) -> bool:
         return await self._run_in_thread(self._click_element_sync, minerva_id)

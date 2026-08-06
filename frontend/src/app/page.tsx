@@ -45,8 +45,12 @@ export default function Home() {
   // WebSocket connection with auto-reconnect
   // -----------------------------------------------------------------------
   const connectWs = useCallback(() => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "ws://localhost:8000";
-    const socket = new WebSocket(`${backendUrl}/ws`);
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    const url = new URL(backendUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/ws";
+    url.search = "";
+    const socket = new WebSocket(url.toString());
     ws.current = socket;
 
     socket.onopen = () => {

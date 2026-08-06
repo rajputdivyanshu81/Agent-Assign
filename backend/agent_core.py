@@ -82,7 +82,8 @@ SYSTEM_PROMPT = """You are Minerva, an AI browser agent. You autonomously naviga
 You will receive:
 1. The user's GOAL
 2. A list of INTERACTIVE ELEMENTS on the page, each with a numeric id
-3. The CURRENT URL
+3. The readable PAGE TEXT
+4. The CURRENT URL
 
 You must respond with EXACTLY ONE action in valid JSON format. No extra text, no markdown.
 
@@ -104,6 +105,7 @@ Rules:
 - IMPORTANT TIP: When typing cities into flight/travel search boxes, always use PRESS_ENTER immediately after typing to lock in the autocomplete selection.
 - Use PRESS_ENTER to submit a form if there is no obvious submit button.
 - Use EXTRACT when you have gathered useful data from the page. Include ALL relevant data.
+- When compiling a comparison, keep extracted data structured as arrays of objects with source names, URLs, facts, and notes.
 - Use DONE when the goal is fully accomplished. Include a summary.
 - Use STUCK if you cannot make progress after trying alternatives.
 - NEVER attempt to bypass CAPTCHAs, login walls, or anti-bot protections.
@@ -182,6 +184,7 @@ class MinervaAgent:
                 # 1. OBSERVE
                 screenshot = await self.browser.capture_screenshot()
                 dom_snapshot = await self.browser.get_interactive_dom()
+                page_text = await self.browser.get_readable_text()
                 self.state.current_url = self.browser.page.url
 
                 await self._emit("screenshot", {"image": screenshot, "url": self.state.current_url})
@@ -205,7 +208,7 @@ class MinervaAgent:
                     "message": f"Analyzing page: {self.state.current_url}"
                 })
 
-                action = await self._think(screenshot, dom_snapshot)
+                action = await self._think(screenshot, dom_snapshot, page_text)
                 if action is None:
                     self.state.status = "error"
                     await self._emit("log", {
@@ -350,7 +353,7 @@ class MinervaAgent:
     # ------------------------------------------------------------------
     # Internal: LLM reasoning
     # ------------------------------------------------------------------
-    async def _think(self, screenshot_b64: str, dom_snapshot: str) -> AgentAction | None:
+    async def _think(self, screenshot_b64: str, dom_snapshot: str, page_text: str) -> AgentAction | None:
         """Send multimodal prompt to Groq and parse the response."""
 
         user_message = f"""GOAL: {self.state.goal}
@@ -361,6 +364,9 @@ STEP: {self.state.step_count} of {MAX_STEPS}
 <page_content>
 INTERACTIVE ELEMENTS:
 {dom_snapshot[:8000]}
+
+READABLE PAGE TEXT:
+{page_text[:12000]}
 </page_content>
 
 PREVIOUS ACTIONS (last 5):
