@@ -27,8 +27,16 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from anthropic import AsyncAnthropic
-from openai import AsyncOpenAI
+try:
+    from anthropic import AsyncAnthropic
+except ImportError:
+    AsyncAnthropic = None
+
+try:
+    from openai import AsyncOpenAI
+except ImportError:
+    AsyncOpenAI = None
+
 from groq import AsyncGroq
 from browser_manager import SafeBrowserManager
 
@@ -105,18 +113,16 @@ Rules:
 - Use GOTO only for full URLs, never for relative paths.
 - Use CLICK with the element_id from the interactive elements list. If a popup or overlay blocks the page, look for and CLICK the 'Close', 'X', or 'Decline' element.
 - Use TYPE to fill input fields. The field is automatically cleared before typing, so you don't need to manually clear pre-filled text.
-- IMPORTANT TIP: When typing cities into flight/travel search boxes, always use PRESS_ENTER immediately after typing to lock in the autocomplete selection.
 - Use PRESS_ENTER to submit a form if there is no obvious submit button.
 - Use EXTRACT when you have gathered useful data from the page. Include ALL relevant data.
-- When compiling a comparison, keep extracted data structured as arrays of objects with source names, URLs, facts, and notes.
+- When compiling a product comparison, keep extracted data structured as arrays of objects with product titles, prices, source names, URLs, and notes.
 - Use DONE when the goal is fully accomplished. Include a summary.
 - Use STUCK if you cannot make progress after trying alternatives.
 - NEVER attempt to bypass CAPTCHAs, login walls, or anti-bot protections.
 - If you detect a CAPTCHA or login requirement, respond with STUCK and explain.
 - If a CLICK does not visibly change the page or URL, do not repeat that same CLICK. Try a search, a direct URL, scrolling, or a different element.
-- For pricing research, prefer official pricing pages such as the product's /pricing page over marketing "learn more" buttons.
-- If the user's goal is about flights, stay on flight-search surfaces and avoid hotel, rental, and vacation-rental tabs unless the goal explicitly asks for them.
-- MULTI-SOURCE RULE: If the user asks for the "cheapest", "best", or "top" option, you MUST search at least two different sources (e.g., kayak.com and flights.google.com). Do NOT call DONE until you have successfully extracted data from at least two different websites. If you fail to find information on one site, use GOTO to try another site immediately.
+- E-COMMERCE RULE: When searching for products on e-commerce sites (like ebay.com or bestbuy.com), identify the search input field, type the product name, and press enter. Then look for the main search result items, extract their titles and prices, and use GOTO to proceed to the next e-commerce site to compare.
+- MULTI-SOURCE RULE: If the user asks for the "cheapest", "best", or "top" option, you MUST search at least two different sources (e.g., ebay.com and bestbuy.com). Do NOT call DONE until you have successfully extracted data from at least two different websites. If you fail to find information on one site, use GOTO to try another site immediately.
 - EXTRACTION RULE: If your goal is to extract information and you can already see the relevant text on the screen, immediately use the EXTRACT action. Do not scroll or click unnecessarily.
 - Be methodical: plan your approach, then execute step by step.
 """
@@ -176,8 +182,12 @@ class MinervaAgent:
 
     def _build_llm_client(self):
         if self.provider == "openai":
+            if not AsyncOpenAI:
+                raise ImportError("The 'openai' package is not installed. Run `pip install openai` to use OpenAI models.")
             return AsyncOpenAI(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
         if self.provider in ("claude", "anthropic"):
+            if not AsyncAnthropic:
+                raise ImportError("The 'anthropic' package is not installed. Run `pip install anthropic` to use Claude models.")
             return AsyncAnthropic(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
         return AsyncGroq(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
 
@@ -199,9 +209,14 @@ class MinervaAgent:
             })
 
             # Start from a neutral search page and let the LLM choose the route.
-            await self.browser.safe_goto("https://html.duckduckgo.com/html/")
-            screenshot = await self.browser.capture_screenshot()
-            await self._emit("screenshot", {"image": screenshot, "url": self.browser.page.url})
+            await self.browser.safe_goto("https://www.google.com")
+            dom_data = await self.browser.get_interactive_dom()
+            title = await self.browser.get_title()
+            await self._emit("page_state", {
+                "url": self.browser.page.url,
+                "title": title,
+                "elements": dom_data["elements"]
+            })
 
             while self.state.step_count < MAX_STEPS:
                 # --- Check stop signal ---
@@ -223,15 +238,20 @@ class MinervaAgent:
                 self.state.step_count += 1
 
                 # 1. OBSERVE
-                screenshot = await self.browser.capture_screenshot()
-                dom_snapshot = await self.browser.get_interactive_dom()
+                dom_data = await self.browser.get_interactive_dom()
+                dom_snapshot = dom_data["dom"]
                 page_text = await self.browser.get_readable_text()
                 self.state.current_url = self.browser.page.url
+                title = await self.browser.get_title()
 
-                await self._emit("screenshot", {"image": screenshot, "url": self.state.current_url})
+                await self._emit("page_state", {
+                    "url": self.state.current_url,
+                    "title": title,
+                    "elements": dom_data["elements"]
+                })
 
                 # 2. Check for CAPTCHA / anti-bot
-                captcha_detected = await self._check_captcha(dom_snapshot, screenshot)
+                captcha_detected = await self._check_captcha(dom_snapshot)
                 if captcha_detected:
                     self.state.status = "blocked"
                     await self._emit("log", {
@@ -607,7 +627,7 @@ Respond with exactly one JSON action. No markdown, no extra text."""
     # ------------------------------------------------------------------
     # Internal: Safety checks
     # ------------------------------------------------------------------
-    async def _check_captcha(self, dom_snapshot: str, screenshot_b64: str) -> bool:
+    async def _check_captcha(self, dom_snapshot: str) -> bool:
         """Check DOM for known CAPTCHA and anti-bot indicators."""
         combined_text = dom_snapshot.lower()
         page_title = await self.browser.get_title()

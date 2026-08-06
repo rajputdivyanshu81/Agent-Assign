@@ -94,7 +94,7 @@ async def run_agent(
     goal: str,
     run_id: uuid.UUID,
     approval_mode: bool = False,
-    provider: str = "openai",
+    provider: str = "groq",
     api_key: str | None = None,
     model: str | None = None,
 ):

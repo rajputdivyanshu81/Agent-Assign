@@ -122,7 +122,7 @@ class SafeBrowserManager:
         screenshot_bytes = self.page.screenshot(type="jpeg", quality=75)
         return base64.b64encode(screenshot_bytes).decode("utf-8")
 
-    def _get_interactive_dom_sync(self) -> str:
+    def _get_interactive_dom_sync(self) -> dict:
         js_script = """
         () => {
             const interactiveElements = [];
@@ -166,7 +166,7 @@ class SafeBrowserManager:
             return interactiveElements;
         }
         """
-        elements = self.page.evaluate(js_script)
+        elements = self.page.evaluate(js_script) or []
 
         simplified_dom = []
         for el in elements:
@@ -176,7 +176,10 @@ class SafeBrowserManager:
             simplified_dom.append(
                 f"<{el['tag']} id={el['id']}{text_part}{placeholder_part}{role_part} />"
             )
-        return "\n".join(simplified_dom)
+        return {
+            "dom": "\n".join(simplified_dom),
+            "elements": elements
+        }
 
     def _get_readable_text_sync(self) -> str:
         js_script = """
@@ -263,7 +266,7 @@ class SafeBrowserManager:
     async def capture_screenshot(self) -> str:
         return await self._run_in_thread(self._screenshot_sync)
 
-    async def get_interactive_dom(self) -> str:
+    async def get_interactive_dom(self) -> dict:
         return await self._run_in_thread(self._get_interactive_dom_sync)
 
     async def get_readable_text(self) -> str:

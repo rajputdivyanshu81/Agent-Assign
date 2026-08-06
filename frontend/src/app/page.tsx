@@ -23,40 +23,31 @@ type AgentStatus =
   | "blocked"
   | "awaiting_approval";
 
-const MODEL_OPTIONS: Record<"openai" | "claude", string[]> = {
-  openai: [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4.1-nano",
-    "gpt-4.1-mini",
-    "gpt-4.1",
-    "o4-mini",
-    "o3",
-  ],
-  claude: [
-    "claude-3-5-haiku-latest",
-    "claude-3-5-sonnet-latest",
-    "claude-sonnet-4",
-    "claude-opus-4",
-    "claude-opus-4.1",
-  ],
-};
+interface InteractiveElement {
+  id: number;
+  tag: string;
+  text: string;
+  placeholder?: string;
+  role?: string;
+}
+
+interface PageState {
+  url: string;
+  title: string;
+  elements: InteractiveElement[];
+}
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function Home() {
   const [goal, setGoal] = useState("");
-  const [provider, setProvider] = useState<"openai" | "claude">("openai");
-  const [model, setModel] = useState("");
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [screenshot, setScreenshot] = useState<string | null>(null);
-  const [browserUrl, setBrowserUrl] = useState<string>("");
+  const [pageState, setPageState] = useState<PageState | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [approvalMode, setApprovalMode] = useState(false);
-  const [apiKey, setApiKey] = useState("");
   const [resultData, setResultData] = useState<Record<string, unknown> | null>(null);
 
   const ws = useRef<WebSocket | null>(null);
@@ -104,9 +95,12 @@ export default function Home() {
           ]);
           break;
 
-        case "screenshot":
-          setScreenshot(data.image);
-          if (data.url) setBrowserUrl(data.url);
+        case "page_state":
+          setPageState({
+            url: data.url || "",
+            title: data.title || "",
+            elements: data.elements || []
+          });
           break;
 
         case "result":
@@ -166,8 +160,7 @@ export default function Home() {
       return;
     }
     setLogs([]);
-    setScreenshot(null);
-    setBrowserUrl("");
+    setPageState(null);
     setResultData(null);
     setRunId(null);
     setStatus("idle");
@@ -175,9 +168,6 @@ export default function Home() {
       type: "start",
       goal,
       approval_mode: approvalMode,
-      provider,
-      api_key: apiKey.trim() || undefined,
-      model: model || undefined,
     });
   };
 
@@ -192,12 +182,7 @@ export default function Home() {
     send({ type: "set_approval_mode", enabled: next });
   };
 
-  useEffect(() => {
-    const allowed = MODEL_OPTIONS[provider];
-    if (!allowed.includes(model)) {
-      setModel(allowed[0]);
-    }
-  }, [provider, model]);
+
 
   // -----------------------------------------------------------------------
   // Helpers
@@ -260,50 +245,12 @@ export default function Home() {
               <span className={styles.cardIcon}>🎯</span>
               <span className={styles.cardTitle}>Agent Goal</span>
             </div>
-            <div className={styles.providerRow}>
-              <button
-                className={`${styles.providerPill} ${provider === "openai" ? styles.providerPillActive : ""}`}
-                onClick={() => setProvider("openai")}
-                disabled={isRunning}
-              >
-                OpenAI
-              </button>
-              <button
-                className={`${styles.providerPill} ${provider === "claude" ? styles.providerPillActive : ""}`}
-                onClick={() => setProvider("claude")}
-                disabled={isRunning}
-              >
-                Claude
-              </button>
-            </div>
-            <select
-              className={styles.modelSelect}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={isRunning}
-            >
-              {MODEL_OPTIONS[provider].map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
             <textarea
               className={styles.inputGoal}
-              placeholder="e.g., Research pricing plans for Slack, Notion, and Asana and compile them into a comparison table..."
+              placeholder="e.g., Search the web to find and compare the price of 'Sony WH-1000XM5' headphones across different online stores..."
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               disabled={isRunning}
-            />
-            <input
-              className={styles.inputKey}
-              type="password"
-              placeholder={`${provider === "openai" ? "OpenAI" : "Claude"} API key for this run (optional if set in env)`}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              disabled={isRunning}
-              autoComplete="off"
-              spellCheck={false}
             />
             <div className={styles.controls}>
               {!isRunning ? (
@@ -385,8 +332,8 @@ export default function Home() {
         <div className={styles.rightPane}>
           <div className={styles.browserCard}>
             <div className={styles.cardHeader}>
-              <span className={styles.cardIcon}>🌐</span>
-              <span className={styles.cardTitle}>Live Browser View</span>
+              <span className={styles.cardIcon}>📄</span>
+              <span className={styles.cardTitle}>Live Page State</span>
             </div>
 
             {/* Faux browser chrome */}
@@ -397,24 +344,41 @@ export default function Home() {
                 <span className={`${styles.browserDot} ${styles.browserDotGreen}`} />
               </div>
               <span className={styles.browserUrlText}>
-                {browserUrl || (screenshot ? "Agent is browsing..." : "Waiting for agent...")}
+                {pageState?.url || (pageState ? "Agent is browsing..." : "Waiting for agent...")}
               </span>
             </div>
 
-            {/* Viewport */}
+            {/* Elements Viewport */}
             <div className={styles.browserViewport}>
-              {screenshot ? (
-                <img
-                  className={styles.browserScreenshot}
-                  src={`data:image/jpeg;base64,${screenshot}`}
-                  alt="Live browser screenshot"
-                  onError={() => setScreenshot(null)}
-                />
+              {pageState && pageState.elements.length > 0 ? (
+                <div className={styles.elementsContainer}>
+                  <div className={styles.pageTitleHeader}>
+                    <strong>Page Title:</strong> {pageState.title || "Untitled Page"}
+                  </div>
+                  <div className={styles.elementsList}>
+                    {pageState.elements.map((el) => (
+                      <div key={el.id} className={styles.elementRow}>
+                        <span className={`${styles.elementTag} ${styles[`tag_${el.tag}`] || ""}`}>
+                          {el.tag.toUpperCase()}
+                        </span>
+                        <span className={styles.elementId}>#{el.id}</span>
+                        <span className={styles.elementText}>
+                          {el.text || el.placeholder ? (
+                            el.text || el.placeholder
+                          ) : (
+                            <em className={styles.emptyText}>empty</em>
+                          )}
+                        </span>
+                        {el.role && <span className={styles.elementRole}>{el.role}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : (
                 <div className={styles.browserPlaceholder}>
-                  <div className={styles.browserPlaceholderIcon}>🖥️</div>
+                  <div className={styles.browserPlaceholderIcon}>📋</div>
                   <p className={styles.browserPlaceholderText}>
-                    Live screenshots will stream here once the agent starts browsing.
+                    Active page title, URL, and a live interactive DOM tree elements list will render here once the agent starts.
                   </p>
                 </div>
               )}
