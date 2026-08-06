@@ -135,7 +135,13 @@ class SafeBrowserManager:
 
             const allElements = document.querySelectorAll('*');
             allElements.forEach(el => {
-                const tagName = el.tagName.toLowerCase();
+                let tagName = el.tagName.toLowerCase();
+                if (tagName === 'input') {
+                    const inputType = (el.getAttribute('type') || '').toLowerCase();
+                    if (['submit', 'button', 'image', 'reset'].includes(inputType)) {
+                        tagName = 'button';
+                    }
+                }
                 const isInteractiveTag = tags.includes(tagName);
                 const hasCursorPointer = window.getComputedStyle(el).cursor === 'pointer';
                 const hasClickAttr = el.hasAttribute('onclick') || el.getAttribute('role') === 'button';

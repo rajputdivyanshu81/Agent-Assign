@@ -48,7 +48,7 @@ logger = logging.getLogger("minerva_backend.agent")
 MAX_STEPS = 30
 MAX_RETRIES_PER_STEP = 3
 STUCK_THRESHOLD = 3  # Consecutive identical actions before halting
-RATE_LIMIT_BACKOFF = [2, 4, 8]  # seconds
+RATE_LIMIT_BACKOFF = [10, 20, 40]  # seconds
 LLM_TIMEOUT_SECONDS = 35
 
 CAPTCHA_INDICATORS = [
@@ -119,8 +119,9 @@ Rules:
 - Use DONE when the goal is fully accomplished. Include a summary.
 - Use STUCK if you cannot make progress after trying alternatives.
 - NEVER attempt to bypass CAPTCHAs, login walls, or anti-bot protections.
-- If you detect a CAPTCHA or login requirement, respond with STUCK and explain.
+- If you detect a login requirement or CAPTCHA on a store page (like eBay) and cannot bypass it, use GOTO to navigate to a different store to compare, or respond with STUCK if no other sources exist.
 - If a CLICK does not visibly change the page or URL, do not repeat that same CLICK. Try a search, a direct URL, scrolling, or a different element.
+- SEARCH ENGINE RULE: Do NOT use Google or DuckDuckGo. ALWAYS use Bing directly for web searches by using GOTO with the query parameter (e.g. {"action": "GOTO", "url": "https://www.bing.com/search?q=your+search+query"}). Do not falsely report being STUCK; just read the results and click the relevant links. If Bing fails, you may try going directly to a store URL (e.g., https://www.bestbuy.com or https://www.amazon.com).
 - E-COMMERCE RULE: When searching for products on e-commerce sites (like ebay.com or bestbuy.com), identify the search input field, type the product name, and press enter. Then look for the main search result items, extract their titles and prices, and use GOTO to proceed to the next e-commerce site to compare.
 - MULTI-SOURCE RULE: If the user asks for the "cheapest", "best", or "top" option, you MUST search at least two different sources (e.g., ebay.com and bestbuy.com). Do NOT call DONE until you have successfully extracted data from at least two different websites. If you fail to find information on one site, use GOTO to try another site immediately.
 - EXTRACTION RULE: If your goal is to extract information and you can already see the relevant text on the screen, immediately use the EXTRACT action. Do not scroll or click unnecessarily.
@@ -208,8 +209,8 @@ class MinervaAgent:
                 "message": f"Goal received: {goal}. Starting browser session..."
             })
 
-            # Start from a neutral search page and let the LLM choose the route.
-            await self.browser.safe_goto("https://www.google.com")
+            # Start from a blank page and let the LLM choose the route.
+            await self.browser.safe_goto("https://www.bing.com/")
             dom_data = await self.browser.get_interactive_dom()
             title = await self.browser.get_title()
             await self._emit("page_state", {
@@ -253,14 +254,21 @@ class MinervaAgent:
                 # 2. Check for CAPTCHA / anti-bot
                 captcha_detected = await self._check_captcha(dom_snapshot)
                 if captcha_detected:
-                    self.state.status = "blocked"
-                    await self._emit("log", {
-                        "step": self.state.step_count,
-                        "step_type": "error",
-                        "message": "⚠️ Anti-bot protection detected (CAPTCHA/Cloudflare). Stopping — human intervention required."
-                    })
-                    await self._emit("status", {"status": "blocked"})
-                    break
+                    if "google.com" in self.state.current_url:
+                        await self._emit("log", {
+                            "step": self.state.step_count,
+                            "step_type": "warning",
+                            "message": "⚠️ Google anti-bot challenge detected. Attempting fallback..."
+                        })
+                    else:
+                        self.state.status = "blocked"
+                        await self._emit("log", {
+                            "step": self.state.step_count,
+                            "step_type": "error",
+                            "message": "⚠️ Anti-bot protection detected (CAPTCHA/Cloudflare). Stopping — human intervention required."
+                        })
+                        await self._emit("status", {"status": "blocked"})
+                        break
 
                 # 3. THINK — call LLM
                 await self._emit("log", {
@@ -269,7 +277,7 @@ class MinervaAgent:
                     "message": f"Analyzing page: {self.state.current_url}"
                 })
 
-                action = await self._think(screenshot, dom_snapshot, page_text)
+                action = await self._think(dom_snapshot, page_text)
                 if action is None:
                     self.state.status = "error"
                     await self._emit("log", {
@@ -423,8 +431,8 @@ class MinervaAgent:
     # ------------------------------------------------------------------
     # Internal: LLM reasoning
     # ------------------------------------------------------------------
-    async def _think(self, screenshot_b64: str, dom_snapshot: str, page_text: str) -> AgentAction | None:
-        """Send multimodal prompt to Groq and parse the response."""
+    async def _think(self, dom_snapshot: str, page_text: str) -> AgentAction | None:
+        """Send prompt to Groq and parse the response."""
 
         user_message = f"""GOAL: {self.state.goal}
 

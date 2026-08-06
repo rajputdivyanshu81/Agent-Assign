@@ -72,3 +72,10 @@ The UI supports:
 - Step-by-step approval mode, enabled before starting a run, requiring approval before each browser action.
 
 When the agent detects anti-bot protection, login walls, repeated actions, invalid actions, or step limits, it streams the failure reason instead of silently hanging.
+
+## Recent Updates
+
+- **Anti-bot Resilience**: Updated the system prompt to explicitly avoid Google and DuckDuckGo which aggressively block headless browsers. The agent now defaults to Bing or direct URLs for e-commerce sites to prevent false CAPTCHA triggers.
+- **API Rate Limiting Mitigation**: Increased exponential backoffs in the event of `HTTP 429 Too Many Requests` (e.g. from Groq's free tier) to allow rate limits to reset automatically instead of crashing.
+- **Frontend UI Enhancements**: Cleaned up the interactive DOM snapshot view to filter out noisy non-semantic tags (like `SVG`, `PATH`, `DIV`, `SPAN`) ensuring the live page state is clean and readable.
+- **Next.js Stability**: Handled Next.js `.next` cache corruption issues on Windows virtual drives to prevent the dev server from crashing.

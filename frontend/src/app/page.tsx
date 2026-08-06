@@ -356,22 +356,28 @@ export default function Home() {
                     <strong>Page Title:</strong> {pageState.title || "Untitled Page"}
                   </div>
                   <div className={styles.elementsList}>
-                    {pageState.elements.map((el) => (
-                      <div key={el.id} className={styles.elementRow}>
-                        <span className={`${styles.elementTag} ${styles[`tag_${el.tag}`] || ""}`}>
-                          {el.tag.toUpperCase()}
-                        </span>
-                        <span className={styles.elementId}>#{el.id}</span>
-                        <span className={styles.elementText}>
-                          {el.text || el.placeholder ? (
-                            el.text || el.placeholder
-                          ) : (
-                            <em className={styles.emptyText}>empty</em>
-                          )}
-                        </span>
-                        {el.role && <span className={styles.elementRole}>{el.role}</span>}
-                      </div>
-                    ))}
+                    {pageState.elements
+                      .filter((el) => {
+                        const text = (el.text || el.placeholder || "").trim();
+                        const tag = el.tag.toLowerCase();
+                        // Filter out empty graphical wrappers, spans, and divs to show only clean links/buttons/inputs
+                        if (["svg", "path", "g", "rect", "circle", "span", "div", "image"].includes(tag) && !text) {
+                          return false;
+                        }
+                        return !!text;
+                      })
+                      .map((el) => (
+                        <div key={el.id} className={styles.elementRow}>
+                          <span className={`${styles.elementTag} ${styles[`tag_${el.tag}`] || ""}`}>
+                            {el.tag.toUpperCase()}
+                          </span>
+                          <span className={styles.elementId}>#{el.id}</span>
+                          <span className={styles.elementText}>
+                            {el.text || el.placeholder}
+                          </span>
+                          {el.role && <span className={styles.elementRole}>{el.role}</span>}
+                        </div>
+                      ))}
                   </div>
                 </div>
               ) : (
