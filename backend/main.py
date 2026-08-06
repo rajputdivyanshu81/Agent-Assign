@@ -213,7 +213,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         goal,
                         run_id,
                         approval_mode=bool(msg.get("approval_mode", False)),
-                        provider=str(msg.get("provider", "openai")),
+                        provider=str(msg.get("provider", "groq")),
                         api_key=msg.get("api_key"),
                         model=msg.get("model"),
                     )
