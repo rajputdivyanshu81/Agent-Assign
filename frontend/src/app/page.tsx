@@ -28,6 +28,7 @@ type AgentStatus =
 // ---------------------------------------------------------------------------
 export default function Home() {
   const [goal, setGoal] = useState("");
+  const [provider, setProvider] = useState<"groq" | "openai" | "claude">("groq");
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export default function Home() {
   const [wsConnected, setWsConnected] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [approvalMode, setApprovalMode] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const [resultData, setResultData] = useState<Record<string, unknown> | null>(null);
 
   const ws = useRef<WebSocket | null>(null);
@@ -149,7 +151,13 @@ export default function Home() {
     setResultData(null);
     setRunId(null);
     setStatus("idle");
-    send({ type: "start", goal, approval_mode: approvalMode });
+    send({
+      type: "start",
+      goal,
+      approval_mode: approvalMode,
+      provider,
+      api_key: apiKey.trim() || undefined,
+    });
   };
 
   const handleStop = () => send({ type: "stop" });
@@ -224,12 +232,45 @@ export default function Home() {
               <span className={styles.cardIcon}>🎯</span>
               <span className={styles.cardTitle}>Agent Goal</span>
             </div>
+            <div className={styles.providerRow}>
+              <button
+                className={`${styles.providerPill} ${provider === "groq" ? styles.providerPillActive : ""}`}
+                onClick={() => setProvider("groq")}
+                disabled={isRunning}
+              >
+                Groq
+              </button>
+              <button
+                className={`${styles.providerPill} ${provider === "openai" ? styles.providerPillActive : ""}`}
+                onClick={() => setProvider("openai")}
+                disabled={isRunning}
+              >
+                OpenAI
+              </button>
+              <button
+                className={`${styles.providerPill} ${provider === "claude" ? styles.providerPillActive : ""}`}
+                onClick={() => setProvider("claude")}
+                disabled={isRunning}
+              >
+                Claude
+              </button>
+            </div>
             <textarea
               className={styles.inputGoal}
               placeholder="e.g., Research pricing plans for Slack, Notion, and Asana and compile them into a comparison table..."
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               disabled={isRunning}
+            />
+            <input
+              className={styles.inputKey}
+              type="password"
+              placeholder={`${provider === "groq" ? "Groq" : provider === "openai" ? "OpenAI" : "Claude"} API key for this run (optional if set in env)`}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              disabled={isRunning}
+              autoComplete="off"
+              spellCheck={false}
             />
             <div className={styles.controls}>
               {!isRunning ? (

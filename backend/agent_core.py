@@ -27,6 +27,8 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from groq import AsyncGroq
 from browser_manager import SafeBrowserManager
 
@@ -124,7 +126,13 @@ Rules:
 # Core Agent
 # ---------------------------------------------------------------------------
 class MinervaAgent:
-    def __init__(self, ws_send_callback, run_id: str):
+    def __init__(
+        self,
+        ws_send_callback,
+        run_id: str,
+        provider: str = "groq",
+        api_key: str | None = None,
+    ):
         """
         Args:
             ws_send_callback: async callable(dict) to stream events to the frontend
@@ -134,11 +142,10 @@ class MinervaAgent:
         self.run_id = run_id
         self.browser = SafeBrowserManager()
         self.state = AgentState()
-        self.groq_client = AsyncGroq(
-            api_key=os.getenv("GROQ_API_KEY"),
-            max_retries=0,
-            timeout=LLM_TIMEOUT_SECONDS,
-        )
+        self.provider = provider.lower()
+        self.api_key = api_key or self._default_api_key_for_provider(self.provider)
+        self.llm_client = self._build_llm_client()
+        self.llm_model = self._default_model_for_provider(self.provider)
 
         # Steering controls
         self.stop_event = asyncio.Event()
@@ -147,6 +154,31 @@ class MinervaAgent:
         self.approval_event = asyncio.Event()
         self.approval_event.set()  # Start without needing approval
         self.approval_mode = False
+
+    def _default_api_key_for_provider(self, provider: str) -> str | None:
+        env_map = {
+            "openai": os.getenv("OPENAI_API_KEY"),
+            "claude": os.getenv("ANTHROPIC_API_KEY"),
+            "anthropic": os.getenv("ANTHROPIC_API_KEY"),
+            "groq": os.getenv("GROQ_API_KEY"),
+        }
+        return env_map.get(provider)
+
+    def _default_model_for_provider(self, provider: str) -> str:
+        model_map = {
+            "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            "claude": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+            "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+            "groq": os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+        }
+        return model_map.get(provider, "gpt-4o-mini")
+
+    def _build_llm_client(self):
+        if self.provider == "openai":
+            return AsyncOpenAI(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
+        if self.provider in ("claude", "anthropic"):
+            return AsyncAnthropic(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
+        return AsyncGroq(api_key=self.api_key, max_retries=0, timeout=LLM_TIMEOUT_SECONDS)
 
     # ------------------------------------------------------------------
     # Public API
@@ -394,22 +426,10 @@ Respond with exactly one JSON action. No markdown, no extra text."""
         for attempt in range(MAX_RETRIES_PER_STEP):
             try:
                 response = await asyncio.wait_for(
-                    self.groq_client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {
-                                "role": "user",
-                                "content": user_message
-                            }
-                        ],
-                        temperature=0.3,
-                        max_tokens=1024
-                    ),
+                    self._create_llm_response(user_message),
                     timeout=LLM_TIMEOUT_SECONDS + 5,
                 )
-
-                raw_response = response.choices[0].message.content.strip()
+                raw_response = response.strip()
                 logger.info(f"LLM raw response: {raw_response}")
 
                 return self._parse_action(raw_response)
@@ -438,6 +458,43 @@ Respond with exactly one JSON action. No markdown, no extra text."""
                         await asyncio.sleep(1)
 
         return None
+
+    async def _create_llm_response(self, user_message: str) -> str:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ]
+
+        if self.provider == "openai":
+            response = await self.llm_client.chat.completions.create(
+                model=self.llm_model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            return response.choices[0].message.content.strip()
+
+        if self.provider in ("claude", "anthropic"):
+            response = await self.llm_client.messages.create(
+                model=self.llm_model,
+                max_tokens=1024,
+                temperature=0.3,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            parts = []
+            for block in response.content:
+                if getattr(block, "type", "") == "text":
+                    parts.append(block.text)
+            return "".join(parts).strip()
+
+        response = await self.llm_client.chat.completions.create(
+            model=self.llm_model,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content.strip()
 
     def _parse_action(self, raw: str) -> AgentAction | None:
         """Parse the LLM's JSON response into an AgentAction."""

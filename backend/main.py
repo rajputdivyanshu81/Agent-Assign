@@ -39,8 +39,6 @@ app.add_middleware(
 async def startup_event():
     """Validate env vars and initialize database tables on startup."""
     import os
-    if not os.getenv("GROQ_API_KEY"):
-        raise RuntimeError("GROQ_API_KEY environment variable is not set.")
     if not os.getenv("DATABASE_URL"):
         raise RuntimeError("DATABASE_URL environment variable is not set.")
 
@@ -91,7 +89,14 @@ manager = ConnectionManager()
 # ---------------------------------------------------------------------------
 # Agent run orchestrator
 # ---------------------------------------------------------------------------
-async def run_agent(ws_id: str, goal: str, run_id: uuid.UUID, approval_mode: bool = False):
+async def run_agent(
+    ws_id: str,
+    goal: str,
+    run_id: uuid.UUID,
+    approval_mode: bool = False,
+    provider: str = "groq",
+    api_key: str | None = None,
+):
     """Launch the real MinervaAgent and persist steps/results to DB."""
 
     async def ws_send_callback(data: dict):
@@ -114,7 +119,12 @@ async def run_agent(ws_id: str, goal: str, run_id: uuid.UUID, approval_mode: boo
                 logger.error(f"DB write failed for step (non-fatal): {e}")
 
     # Create the agent
-    agent = MinervaAgent(ws_send_callback=ws_send_callback, run_id=str(run_id))
+    agent = MinervaAgent(
+        ws_send_callback=ws_send_callback,
+        run_id=str(run_id),
+        provider=provider,
+        api_key=api_key,
+    )
     agent.set_approval_mode(approval_mode)
     manager.active_agents[ws_id] = agent
 
@@ -201,6 +211,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         goal,
                         run_id,
                         approval_mode=bool(msg.get("approval_mode", False)),
+                        provider=str(msg.get("provider", "groq")),
+                        api_key=msg.get("api_key"),
                     )
                 )
                 await manager.send_json(ws_id, {
