@@ -39,6 +39,7 @@ MAX_STEPS = 30
 MAX_RETRIES_PER_STEP = 3
 STUCK_THRESHOLD = 3  # Consecutive identical actions before halting
 RATE_LIMIT_BACKOFF = [2, 4, 8]  # seconds
+LLM_TIMEOUT_SECONDS = 35
 
 CAPTCHA_INDICATORS = [
     "captcha", "recaptcha", "hcaptcha", "cf-turnstile",
@@ -130,7 +131,11 @@ class MinervaAgent:
         self.run_id = run_id
         self.browser = SafeBrowserManager()
         self.state = AgentState()
-        self.groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+        self.groq_client = AsyncGroq(
+            api_key=os.getenv("GROQ_API_KEY"),
+            max_retries=0,
+            timeout=LLM_TIMEOUT_SECONDS,
+        )
 
         # Steering controls
         self.stop_event = asyncio.Event()
@@ -385,17 +390,20 @@ Respond with exactly one JSON action. No markdown, no extra text."""
 
         for attempt in range(MAX_RETRIES_PER_STEP):
             try:
-                response = await self.groq_client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {
-                            "role": "user",
-                            "content": user_message
-                        }
-                    ],
-                    temperature=0.3,
-                    max_tokens=1024
+                response = await asyncio.wait_for(
+                    self.groq_client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {
+                                "role": "user",
+                                "content": user_message
+                            }
+                        ],
+                        temperature=0.3,
+                        max_tokens=1024
+                    ),
+                    timeout=LLM_TIMEOUT_SECONDS + 5,
                 )
 
                 raw_response = response.choices[0].message.content.strip()
@@ -403,6 +411,13 @@ Respond with exactly one JSON action. No markdown, no extra text."""
 
                 return self._parse_action(raw_response)
 
+            except asyncio.TimeoutError:
+                logger.warning("LLM call timed out.")
+                await self._emit("log", {
+                    "step": self.state.step_count,
+                    "step_type": "think",
+                    "message": "LLM call timed out, retrying with a fresh observation..."
+                })
             except Exception as e:
                 error_str = str(e)
                 if "429" in error_str or "rate_limit" in error_str.lower():
