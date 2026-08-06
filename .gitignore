@@ -2,5 +2,8 @@
 backend/venv/
 backend/.venv-test/
 backend/__pycache__/
+backend/browser_user_data_test/
+backend/*.log
 frontend/node_modules/
 frontend/.next/
+frontend/*.log
