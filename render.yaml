@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: minerva-backend
+    env: docker
+    rootDir: backend
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: MINERVA_HEADLESS
+        value: "true"
+      - key: MINERVA_BROWSER_USER_DATA_DIR
+        value: /tmp/minerva-browser
