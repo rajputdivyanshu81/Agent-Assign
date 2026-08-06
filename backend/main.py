@@ -94,8 +94,9 @@ async def run_agent(
     goal: str,
     run_id: uuid.UUID,
     approval_mode: bool = False,
-    provider: str = "groq",
+    provider: str = "openai",
     api_key: str | None = None,
+    model: str | None = None,
 ):
     """Launch the real MinervaAgent and persist steps/results to DB."""
 
@@ -124,6 +125,7 @@ async def run_agent(
         run_id=str(run_id),
         provider=provider,
         api_key=api_key,
+        model=model,
     )
     agent.set_approval_mode(approval_mode)
     manager.active_agents[ws_id] = agent
@@ -211,8 +213,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         goal,
                         run_id,
                         approval_mode=bool(msg.get("approval_mode", False)),
-                        provider=str(msg.get("provider", "groq")),
+                        provider=str(msg.get("provider", "openai")),
                         api_key=msg.get("api_key"),
+                        model=msg.get("model"),
                     )
                 )
                 await manager.send_json(ws_id, {

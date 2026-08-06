@@ -292,6 +292,29 @@
   border-color: rgba(99, 102, 241, 0.35);
 }
 
+.modelSelect {
+  width: 100%;
+  margin-bottom: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.modelSelect:focus {
+  outline: none;
+  border-color: var(--accent-indigo);
+  box-shadow: 0 0 0 3px var(--accent-indigo-glow);
+}
+
+.modelSelect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* --- Controls --- */
 .controls {
   display: flex;

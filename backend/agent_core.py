@@ -132,6 +132,7 @@ class MinervaAgent:
         run_id: str,
         provider: str = "groq",
         api_key: str | None = None,
+        model: str | None = None,
     ):
         """
         Args:
@@ -144,8 +145,8 @@ class MinervaAgent:
         self.state = AgentState()
         self.provider = provider.lower()
         self.api_key = api_key or self._default_api_key_for_provider(self.provider)
+        self.llm_model = model or self._default_model_for_provider(self.provider)
         self.llm_client = self._build_llm_client()
-        self.llm_model = self._default_model_for_provider(self.provider)
 
         # Steering controls
         self.stop_event = asyncio.Event()

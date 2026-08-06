@@ -23,12 +23,32 @@ type AgentStatus =
   | "blocked"
   | "awaiting_approval";
 
+const MODEL_OPTIONS: Record<"openai" | "claude", string[]> = {
+  openai: [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4.1-nano",
+    "gpt-4.1-mini",
+    "gpt-4.1",
+    "o4-mini",
+    "o3",
+  ],
+  claude: [
+    "claude-3-5-haiku-latest",
+    "claude-3-5-sonnet-latest",
+    "claude-sonnet-4",
+    "claude-opus-4",
+    "claude-opus-4.1",
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function Home() {
   const [goal, setGoal] = useState("");
-  const [provider, setProvider] = useState<"groq" | "openai" | "claude">("groq");
+  const [provider, setProvider] = useState<"openai" | "claude">("openai");
+  const [model, setModel] = useState("");
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -157,6 +177,7 @@ export default function Home() {
       approval_mode: approvalMode,
       provider,
       api_key: apiKey.trim() || undefined,
+      model: model || undefined,
     });
   };
 
@@ -170,6 +191,13 @@ export default function Home() {
     setApprovalMode(next);
     send({ type: "set_approval_mode", enabled: next });
   };
+
+  useEffect(() => {
+    const allowed = MODEL_OPTIONS[provider];
+    if (!allowed.includes(model)) {
+      setModel(allowed[0]);
+    }
+  }, [provider, model]);
 
   // -----------------------------------------------------------------------
   // Helpers
@@ -234,13 +262,6 @@ export default function Home() {
             </div>
             <div className={styles.providerRow}>
               <button
-                className={`${styles.providerPill} ${provider === "groq" ? styles.providerPillActive : ""}`}
-                onClick={() => setProvider("groq")}
-                disabled={isRunning}
-              >
-                Groq
-              </button>
-              <button
                 className={`${styles.providerPill} ${provider === "openai" ? styles.providerPillActive : ""}`}
                 onClick={() => setProvider("openai")}
                 disabled={isRunning}
@@ -255,6 +276,18 @@ export default function Home() {
                 Claude
               </button>
             </div>
+            <select
+              className={styles.modelSelect}
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isRunning}
+            >
+              {MODEL_OPTIONS[provider].map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
             <textarea
               className={styles.inputGoal}
               placeholder="e.g., Research pricing plans for Slack, Notion, and Asana and compile them into a comparison table..."
@@ -265,7 +298,7 @@ export default function Home() {
             <input
               className={styles.inputKey}
               type="password"
-              placeholder={`${provider === "groq" ? "Groq" : provider === "openai" ? "OpenAI" : "Claude"} API key for this run (optional if set in env)`}
+              placeholder={`${provider === "openai" ? "OpenAI" : "Claude"} API key for this run (optional if set in env)`}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               disabled={isRunning}
