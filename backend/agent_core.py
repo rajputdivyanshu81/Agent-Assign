@@ -220,6 +220,15 @@ class MinervaAgent:
 
                 # 4. Check for stuck state (infinite loop detection)
                 if self._is_stuck(action):
+                    if action.action_type == "EXTRACT" and self.state.extracted_data:
+                        self.state.status = "completed"
+                        await self._emit("log", {
+                            "step": self.state.step_count,
+                            "step_type": "done",
+                            "message": "Agent repeated the same extraction, so the structured result is complete."
+                        })
+                        break
+
                     self.state.status = "error"
                     await self._emit("log", {
                         "step": self.state.step_count,
