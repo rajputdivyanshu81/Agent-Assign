@@ -22,7 +22,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m playwright install chromium
 copy ..\.env.example ..\.env
-# Fill GROQ_API_KEY and DATABASE_URL in ..\.env
+# Fill DATABASE_URL in ..\.env; provider keys are entered in the app per run
 .\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -39,7 +39,7 @@ Open `http://localhost:3000`.
 
 ## Deployment
 
-The frontend can run on Vercel or another static Next.js host. Set:
+The frontend can run on Vercel. Set:
 
 ```text
 NEXT_PUBLIC_BACKEND_URL=https://your-backend-host.example
@@ -52,7 +52,6 @@ The backend is containerized in `backend/Dockerfile` using Microsoft's Playwrigh
 Backend environment variables:
 
 ```text
-GROQ_API_KEY=...
 DATABASE_URL=...
 MINERVA_HEADLESS=true
 MINERVA_BROWSER_USER_DATA_DIR=/tmp/minerva-browser
